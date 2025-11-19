@@ -177,6 +177,8 @@ module.exports = function(webpackEnv) {
               .replace(/\\/g, '/')
         : isEnvDevelopment &&
           (info => path.resolve(info.absoluteResourcePath).replace(/\\/g, '/')),
+      // Adicionado para compatibilidade com módulos ESM
+      globalObject: 'this',
     },
     optimization: {
       minimize: isEnvProduction,
@@ -249,10 +251,30 @@ module.exports = function(webpackEnv) {
       splitChunks: {
         chunks: 'all',
         name: false,
+        cacheGroups: {
+          // Vendor chunk para bibliotecas externas
+          vendor: {
+            test: /[\\/]node_modules[\\/]/,
+            name: 'vendors',
+            chunks: 'all',
+            priority: 20,
+          },
+          // Common chunk para código compartilhado
+          common: {
+            name: 'common',
+            minChunks: 2,
+            chunks: 'all',
+            priority: 10,
+            reuseExistingChunk: true,
+            enforce: true,
+          },
+        },
       },
       // Keep the runtime chunk separated to enable long term caching
       // https://twitter.com/wSokra/status/969679223278505985
-      runtimeChunk: true,
+      runtimeChunk: {
+        name: entrypoint => `runtime-${entrypoint.name}`,
+      },
     },
     resolve: {
       // This allows you to set a fallback for where Webpack should look for modules.
@@ -276,6 +298,31 @@ module.exports = function(webpackEnv) {
         // https://www.smashingmagazine.com/2016/08/a-glimpse-into-the-future-with-react-native-for-web/
         'react-native': 'react-native-web',
         'react': __dirname + '/../node_modules/react',
+        // Adicionar aliases para os novos componentes
+        '@components': path.resolve(__dirname, '../src/components/'),
+        '@api': path.resolve(__dirname, '../src/api/'),
+        '@utils': path.resolve(__dirname, '../src/utils/'),
+      },
+      fallback: {
+        // Polyfills para compatibilidade com Node.js modules no browser
+        "fs": false,
+        "path": require.resolve("path-browserify"),
+        "crypto": require.resolve("crypto-browserify"),
+        "stream": require.resolve("stream-browserify"),
+        "http": require.resolve("stream-http"),
+        "https": require.resolve("https-browserify"),
+        "zlib": require.resolve("browserify-zlib"),
+        "url": require.resolve("url/"),
+        "buffer": require.resolve("buffer/"),
+        "util": require.resolve("util/"),
+        "assert": require.resolve("assert/"),
+        "os": require.resolve("os-browserify/browser"),
+        "net": false,
+        "tls": false,
+        "child_process": false,
+        "dgram": false,
+        "dns": false,
+        "module": false,
       },
       plugins: [
         // Adds support for installing with Plug'n'Play, leading to faster installs and adding
@@ -314,7 +361,13 @@ module.exports = function(webpackEnv) {
 
         {
           test: /\.worker\.js$/,
-          loader: 'worker-loader'
+          use: {
+            loader: 'worker-loader',
+            options: {
+              inline: 'no-fallback',
+              publicPath: '/static/js/',
+            }
+          }
         },
         {
           test: /\.jscc$/,
@@ -346,11 +399,12 @@ module.exports = function(webpackEnv) {
             // smaller than specified limit in bytes as data URLs to avoid requests.
             // A missing `test` is equivalent to a match.
             {
-              test: [/\.bmp$/, /\.gif$/, /\.jpe?g$/, /\.png$/],
+              test: [/\.bmp$/, /\.gif$/, /\.jpe?g$/, /\.png$/, /\.svg$/],
               loader: require.resolve('url-loader'),
               options: {
                 limit: 10000,
                 name: 'static/media/[name].[hash:8].[ext]',
+                esModule: false,
               },
             },
             // Process application JS with Babel.
@@ -373,6 +427,16 @@ module.exports = function(webpackEnv) {
                           ReactComponent: '@svgr/webpack?-svgo,+ref![path]',
                         },
                       },
+                    },
+                  ],
+                  // Adicionar plugin para polyfills
+                  require.resolve('@babel/plugin-transform-runtime'),
+                ],
+                presets: [
+                  [
+                    require.resolve('babel-preset-react-app'),
+                    {
+                      runtime: 'automatic',
                     },
                   ],
                 ],
@@ -437,8 +501,10 @@ module.exports = function(webpackEnv) {
               use: getStyleLoaders({
                 importLoaders: 1,
                 sourceMap: isEnvProduction && shouldUseSourceMap,
-                modules: true,
-                getLocalIdent: getCSSModuleLocalIdent,
+                modules: {
+                  mode: 'local',
+                  getLocalIdent: getCSSModuleLocalIdent,
+                },
               }),
             },
             // Opt-in support for SASS (using .scss or .sass extensions).
@@ -468,8 +534,10 @@ module.exports = function(webpackEnv) {
                 {
                   importLoaders: 2,
                   sourceMap: isEnvProduction && shouldUseSourceMap,
-                  modules: true,
-                  getLocalIdent: getCSSModuleLocalIdent,
+                  modules: {
+                    mode: 'local',
+                    getLocalIdent: getCSSModuleLocalIdent,
+                  },
                 },
                 'sass-loader'
               ),
@@ -488,6 +556,7 @@ module.exports = function(webpackEnv) {
               exclude: [/\.(js|mjs|jsx|ts|tsx)$/, /\.html$/, /\.json$/, /\.jscc$/],
               options: {
                 name: 'static/media/[name].[hash:8].[ext]',
+                esModule: false,
               },
             },
             // ** STOP ** Are you adding a new loader?
@@ -497,6 +566,27 @@ module.exports = function(webpackEnv) {
       ],
     },
     plugins: [
+      // Provides Buffer global para compatibilidade
+      new webpack.ProvidePlugin({
+        Buffer: ['buffer', 'Buffer'],
+        process: 'process/browser',
+      }),
+
+      // Define environment variables para a aplicação
+      new webpack.DefinePlugin({
+        ...env.stringified,
+        // Variáveis específicas para o projeto Diablo Web
+        'process.env.REACT_APP_API_URL': JSON.stringify(
+          process.env.REACT_APP_API_URL || (isEnvDevelopment ? 'http://localhost:5000' : '/api')
+        ),
+        'process.env.REACT_APP_WS_URL': JSON.stringify(
+          process.env.REACT_APP_WS_URL || (isEnvDevelopment ? 'ws://localhost:5000' : 'wss://your-production-domain.com')
+        ),
+        'process.env.REACT_APP_MOBILE_SUPPORT': JSON.stringify(true),
+        'process.env.REACT_APP_MULTIPLAYER_SUPPORT': JSON.stringify(true),
+        'process.env.REACT_APP_VERSION': JSON.stringify(process.env.npm_package_version || '1.0.0'),
+      }),
+
       // Generates an `index.html` file with the <script> injected.
       new HtmlWebpackPlugin(
         Object.assign(
@@ -505,6 +595,13 @@ module.exports = function(webpackEnv) {
             inject: true,
             chunks: ['main'],
             template: paths.appHtml,
+            // Adicionar meta tags para PWA e mobile
+            meta: {
+              'viewport': 'width=device-width, initial-scale=1, shrink-to-fit=no, user-scalable=no, viewport-fit=cover',
+              'theme-color': '#000000',
+              'apple-mobile-web-app-capable': 'yes',
+              'apple-mobile-web-app-status-bar-style': 'black-translucent',
+            },
           },
           isEnvProduction
             ? {
@@ -566,12 +663,6 @@ module.exports = function(webpackEnv) {
       // This gives some necessary context to module not found errors, such as
       // the requesting resource.
       new ModuleNotFoundPlugin(paths.appPath),
-      // Makes some environment variables available to the JS code, for example:
-      // if (process.env.NODE_ENV === 'production') { ... }. See `./env.js`.
-      // It is absolutely essential that NODE_ENV is set to production
-      // during a production build.
-      // Otherwise React will be compiled in the very slow development mode.
-      new webpack.DefinePlugin(env.stringified),
       // This is necessary to emit hot updates (currently CSS only):
       //isEnvDevelopment && new webpack.HotModuleReplacementPlugin(),
       // Watcher doesn't work well if you mistype casing in a path so we use
@@ -629,6 +720,38 @@ module.exports = function(webpackEnv) {
             // public/ and not a SPA route
             new RegExp('/[^/]+\\.[^/]+$'),
           ],
+          // Configurações específicas para PWA
+          runtimeCaching: [
+            {
+              urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp)$/,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'images',
+                expiration: {
+                  maxEntries: 100,
+                  maxAgeSeconds: 30 * 24 * 60 * 60, // 30 dias
+                },
+              },
+            },
+            {
+              urlPattern: /\.(?:js|css)$/,
+              handler: 'StaleWhileRevalidate',
+              options: {
+                cacheName: 'static-resources',
+              },
+            },
+            {
+              urlPattern: /^https:\/\/fonts\.(?:gstatic)\.com\/.*/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'google-fonts-webfonts',
+                expiration: {
+                  maxEntries: 10,
+                  maxAgeSeconds: 60 * 60 * 24 * 365, // 1 ano
+                },
+              },
+            },
+          ],
         }),
       // TypeScript type checking
       useTypeScript &&
@@ -662,17 +785,55 @@ module.exports = function(webpackEnv) {
     // Some libraries import Node modules but don't use them in the browser.
     // Tell Webpack to provide empty mocks for them so importing them works.
     node: {
-      module: 'empty',
-      dgram: 'empty',
-      dns: 'mock',
-      fs: 'empty',
-      http2: 'empty',
-      net: 'empty',
-      tls: 'empty',
-      child_process: 'empty',
+      global: true,
+      __filename: true,
+      __dirname: true,
     },
     // Turn off performance processing because we utilize
     // our own hints via the FileSizeReporter
-    performance: false,
+    performance: {
+      maxAssetSize: 5000000, // 5MB - aumentado para WebAssembly
+      maxEntrypointSize: 5000000, // 5MB - aumentado para WebAssembly
+      hints: isEnvProduction ? 'warning' : false,
+    },
+    // Configurações do devServer para desenvolvimento
+    devServer: isEnvDevelopment ? {
+      compress: true,
+      hot: true,
+      host: process.env.HOST || '0.0.0.0',
+      port: process.env.PORT || 3000,
+      public: process.env.PUBLIC_URL || undefined,
+      overlay: false,
+      historyApiFallback: {
+        disableDotRule: true,
+        index: publicPath,
+      },
+      // Proxy para API backend durante desenvolvimento
+      proxy: process.env.REACT_APP_API_URL ? undefined : {
+        '/api': {
+          target: 'http://localhost:5000',
+          changeOrigin: true,
+          secure: false,
+          logLevel: 'debug',
+        },
+        '/socket.io': {
+          target: 'http://localhost:5000',
+          changeOrigin: true,
+          secure: false,
+          ws: true,
+        },
+      },
+      // Headers para suporte a WebAssembly
+      headers: {
+        'Cross-Origin-Embedder-Policy': 'require-corp',
+        'Cross-Origin-Opener-Policy': 'same-origin',
+      },
+      // Configurações para mobile development
+      allowedHosts: [
+        '.localhost',
+        '.ngrok.io',
+        '.loca.lt'
+      ],
+    } : undefined,
   };
 };

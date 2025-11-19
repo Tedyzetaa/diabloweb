@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: diablo-web-backend
+    env: node
+    plan: free
+    buildCommand: cd server && npm install
+    startCommand: cd server && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        fromDatabase:
+          name: diablo-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+
+  - type: web
+    name: diablo-web-frontend
+    env: static
+    buildCommand: npm run build:client
+    staticPublishPath: build
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+
+databases:
+  - name: diablo-db
+    plan: free

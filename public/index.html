@@ -3,36 +3,313 @@
   <head>
     <meta charset="utf-8" />
     <link rel="shortcut icon" href="%PUBLIC_URL%/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    
+    <!-- Meta Tags Otimizadas para Mobile -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#000000" />
-    <!--
-      manifest.json provides metadata used when your web app is installed on a
-      user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
-    -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Diablo Web" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="msapplication-TileColor" content="#000000" />
+    <meta name="msapplication-tap-highlight" content="no" />
+    
+    <!-- Meta Tags de Descrição e SEO -->
+    <meta name="description" content="Play the original Diablo game in your browser with multiplayer support, cloud saves, and mobile controls. The definitive web port of the classic action RPG." />
+    <meta name="keywords" content="diablo, game, rpg, action, multiplayer, online, web, mobile, blizzard, classic" />
+    <meta name="author" content="Diablo Web Team" />
+    
+    <!-- Open Graph Meta Tags -->
+    <meta property="og:title" content="Diablo Web - Play Diablo in Your Browser" />
+    <meta property="og:description" content="Experience the classic Diablo game with modern features: multiplayer, cloud saves, and mobile controls." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="%PUBLIC_URL%" />
+    <meta property="og:image" content="%PUBLIC_URL%/og-image.png" />
+    <meta property="og:site_name" content="Diablo Web" />
+    
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Diablo Web - Play Diablo in Your Browser" />
+    <meta name="twitter:description" content="Classic Diablo with multiplayer, cloud saves, and mobile support." />
+    <meta name="twitter:image" content="%PUBLIC_URL%/twitter-image.png" />
+    
+    <!-- PWA Manifest -->
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-    <!--
-      Notice the use of %PUBLIC_URL% in the tags above.
-      It will be replaced with the URL of the `public` folder during the build.
-      Only files inside the `public` folder can be referenced from the HTML.
-
-      Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
-      work correctly both with client-side routing and a non-root public URL.
-      Learn how to configure a non-root public URL by running `npm run build`.
-    -->
-    <title>DIABLO</title>
+    
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="%PUBLIC_URL%/logo152.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="%PUBLIC_URL%/logo180.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="%PUBLIC_URL%/logo167.png" />
+    
+    <!-- Splash Screens para iOS -->
+    <link rel="apple-touch-startup-image" href="%PUBLIC_URL%/splash-screen.png" />
+    
+    <!-- Favicons para diversos dispositivos -->
+    <link rel="icon" type="image/png" sizes="32x32" href="%PUBLIC_URL%/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="%PUBLIC_URL%/favicon-16x16.png" />
+    
+    <!-- Microsoft Tiles -->
+    <meta name="msapplication-TileImage" content="%PUBLIC_URL%/mstile-144x144.png" />
+    
+    <!-- Preload de recursos críticos -->
+    <link rel="preload" href="%PUBLIC_URL%/static/js/bundle.js" as="script" />
+    <link rel="preload" href="%PUBLIC_URL%/static/css/main.css" as="style" />
+    
+    <!-- Preconnect para APIs externas -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    
+    <!-- Estilos críticos inline para melhor performance -->
+    <style>
+      /* Critical CSS para loading inicial */
+      body {
+        margin: 0;
+        padding: 0;
+        background: #000000;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+          'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        overflow: hidden;
+        position: fixed;
+        width: 100%;
+        height: 100%;
+      }
+      
+      #root {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #000000;
+      }
+      
+      /* Loading screen inicial */
+      .loading-screen {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        background: #000000;
+        color: #d4af37;
+        font-family: 'System UI', sans-serif;
+      }
+      
+      .loading-logo {
+        font-size: 3rem;
+        font-weight: bold;
+        margin-bottom: 2rem;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        color: #d4af37;
+      }
+      
+      .loading-spinner {
+        width: 50px;
+        height: 50px;
+        border: 4px solid #333;
+        border-top: 4px solid #d4af37;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-bottom: 1rem;
+      }
+      
+      .loading-text {
+        font-size: 1.2rem;
+        color: #8b7355;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      /* Estilos para noscript */
+      .noscript-message {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #000000;
+        color: #d4af37;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        text-align: center;
+        z-index: 9999;
+      }
+      
+      .noscript-message h1 {
+        color: #8b0000;
+        margin-bottom: 1rem;
+      }
+      
+      .noscript-message p {
+        margin-bottom: 0.5rem;
+        line-height: 1.5;
+      }
+      
+      /* Prevenção de zoom em inputs mobile */
+      input, select, textarea {
+        font-size: 16px !important;
+      }
+      
+      /* Melhorias de touch para mobile */
+      * {
+        -webkit-tap-highlight-color: transparent;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        -khtml-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+      }
+      
+      input, textarea {
+        -webkit-user-select: text;
+        -khtml-user-select: text;
+        -moz-user-select: text;
+        -ms-user-select: text;
+        user-select: text;
+      }
+      
+      /* Scrollbar personalizada */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      
+      ::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.3);
+        border-radius: 4px;
+      }
+      
+      ::-webkit-scrollbar-thumb {
+        background: #8b4513;
+        border-radius: 4px;
+      }
+      
+      ::-webkit-scrollbar-thumb:hover {
+        background: #d4af37;
+      }
+    </style>
+    
+    <title>Diablo Web - Play Diablo in Your Browser</title>
   </head>
   <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="root"></div>
+    <!-- Mensagem para usuários sem JavaScript -->
+    <noscript>
+      <div class="noscript-message">
+        <h1>JavaScript Required</h1>
+        <p>You need to enable JavaScript to run Diablo Web.</p>
+        <p>This is a modern web application that requires JavaScript for:</p>
+        <ul style="text-align: left; max-width: 400px; margin: 1rem auto;">
+          <li>Game rendering and controls</li>
+          <li>Multiplayer functionality</li>
+          <li>Cloud save synchronization</li>
+          <li>Mobile touch controls</li>
+        </ul>
+        <p>Please enable JavaScript in your browser settings and reload the page.</p>
+      </div>
+    </noscript>
+
+    <!-- Loading screen inicial -->
+    <div id="root">
+      <div class="loading-screen">
+        <div class="loading-logo">DIABLO</div>
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading...</div>
+      </div>
+    </div>
+
     <!--
-      This HTML file is a template.
-      If you open it directly in the browser, you will see an empty page.
+      Este arquivo HTML é um template.
+      Se você abrir diretamente no navegador, verá uma página vazia.
 
-      You can add webfonts, meta tags, or analytics to this file.
-      The build step will place the bundled scripts into the <body> tag.
+      Você pode adicionar webfonts, meta tags ou analytics neste arquivo.
+      O build colocará os scripts bundled na tag <body>.
 
-      To begin the development, run `npm start` or `yarn start`.
-      To create a production bundle, use `npm run build` or `yarn build`.
+      Para começar o desenvolvimento, execute `npm start` ou `yarn start`.
+      Para criar um bundle de produção, use `npm run build` ou `yarn build`.
     -->
+
+    <!-- Script para melhorias de performance -->
+    <script>
+      // Performance optimizations
+      (function() {
+        // Prevenir comportamento de pull-to-refresh em mobile
+        let touchStartY = 0;
+        
+        document.addEventListener('touchstart', function(e) {
+          touchStartY = e.touches[0].clientY;
+        }, { passive: true });
+        
+        document.addEventListener('touchmove', function(e) {
+          const touchY = e.touches[0].clientY;
+          const diff = touchY - touchStartY;
+          
+          if (window.scrollY === 0 && diff > 0) {
+            e.preventDefault();
+          }
+        }, { passive: false });
+        
+        // Detectar dispositivo mobile
+        function isMobileDevice() {
+          return (typeof window.orientation !== "undefined") || (navigator.userAgent.indexOf('IEMobile') !== -1);
+        }
+        
+        // Adicionar classe para mobile
+        if (isMobileDevice()) {
+          document.body.classList.add('mobile-device');
+        }
+        
+        // Service Worker registration para PWA
+        if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+          window.addEventListener('load', function() {
+            navigator.serviceWorker.register('%PUBLIC_URL%/sw.js')
+              .then(function(registration) {
+                console.log('SW registered: ', registration);
+              })
+              .catch(function(registrationError) {
+                console.log('SW registration failed: ', registrationError);
+              });
+          });
+        }
+        
+        // WebAssembly readiness
+        if (typeof WebAssembly === 'object') {
+          console.log('WebAssembly is supported!');
+        } else {
+          console.log('WebAssembly is not supported, falling back to JavaScript');
+        }
+        
+        // Remover loading screen quando o React carregar
+        window.addEventListener('ReactAppLoaded', function() {
+          const loadingScreen = document.querySelector('.loading-screen');
+          if (loadingScreen) {
+            loadingScreen.style.opacity = '0';
+            setTimeout(function() {
+              loadingScreen.remove();
+            }, 500);
+          }
+        });
+        
+        // Fallback para caso o evento não seja disparado
+        setTimeout(function() {
+          const loadingScreen = document.querySelector('.loading-screen');
+          const root = document.getElementById('root');
+          if (loadingScreen && root.children.length > 1) {
+            loadingScreen.remove();
+          }
+        }, 5000);
+        
+      })();
+    </script>
   </body>
 </html>

@@ -3,7 +3,7 @@ import './App.scss';
 import classNames from 'classnames';
 import ReactGA from 'react-ga';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTimes, faDownload } from '@fortawesome/free-solid-svg-icons';
+import { faTimes, faDownload, faUsers, faUser, faCog } from '@fortawesome/free-solid-svg-icons';
 import getPlayerName from './api/savefile';
 
 import { mapStackTrace } from 'sourcemapped-stacktrace';
@@ -14,6 +14,11 @@ import { SpawnSizes } from './api/load_spawn';
 import CompressMpq from './mpqcmp';
 
 import Peer from 'peerjs';
+
+// Novos componentes
+import MobileControls from './components/MobileControls';
+import MultiplayerLobby from './components/MultiplayerLobby';
+import AuthModal from './components/AuthModal';
 
 window.Peer = Peer;
 
@@ -97,7 +102,19 @@ const Link = ({children, ...props}) => <a target="_blank" rel="noopener noreferr
 
 class App extends React.Component {
   files = new Map();
-  state = {started: false, loading: false, dropping: 0, has_spawn: false};
+  state = {
+    started: false, 
+    loading: false, 
+    dropping: 0, 
+    has_spawn: false,
+    showMultiplayerLobby: false,
+    showAuthModal: false,
+    isMobile: window.innerWidth <= 768,
+    user: null,
+    onlineSaves: [],
+    isOnline: false
+  };
+
   cursorPos = {x: 0, y: 0};
 
   touchControls = false;
@@ -131,6 +148,12 @@ class App extends React.Component {
     document.addEventListener("dragenter", this.onDragEnter, true);
     document.addEventListener("dragleave", this.onDragLeave, true);
 
+    // Detectar mudança de tamanho da tela
+    window.addEventListener('resize', this.handleResize);
+    
+    // Verificar autenticação
+    this.checkAuth();
+
     this.fs.then(fs => {
       const spawn = fs.files.get('spawn.mpq');
       if (spawn && SpawnSizes.includes(spawn.byteLength)) {
@@ -141,6 +164,218 @@ class App extends React.Component {
       }
     });
   }
+
+  componentWillUnmount() {
+    window.removeEventListener('resize', this.handleResize);
+  }
+
+  handleResize = () => {
+    this.setState({ isMobile: window.innerWidth <= 768 });
+  }
+
+  // Sistema de Autenticação
+  checkAuth = async () => {
+    const token = localStorage.getItem('diabloAuthToken');
+    if (token) {
+      try {
+        const response = await fetch('/api/auth/verify', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const userData = await response.json();
+          this.setState({ user: userData.user, isOnline: true });
+          this.loadOnlineSaves();
+        }
+      } catch (error) {
+        console.error('Auth verification failed:', error);
+        localStorage.removeItem('diabloAuthToken');
+      }
+    }
+  }
+
+  handleLogin = async (username, password) => {
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        localStorage.setItem('diabloAuthToken', data.token);
+        this.setState({ 
+          user: data.user, 
+          isOnline: true,
+          showAuthModal: false 
+        });
+        this.loadOnlineSaves();
+        return { success: true };
+      } else {
+        const error = await response.json();
+        return { success: false, error: error.error };
+      }
+    } catch (error) {
+      return { success: false, error: 'Connection failed' };
+    }
+  }
+
+  handleRegister = async (username, email, password) => {
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, email, password })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        localStorage.setItem('diabloAuthToken', data.token);
+        this.setState({ 
+          user: data.user, 
+          isOnline: true,
+          showAuthModal: false 
+        });
+        this.loadOnlineSaves();
+        return { success: true };
+      } else {
+        const error = await response.json();
+        return { success: false, error: error.error };
+      }
+    } catch (error) {
+      return { success: false, error: 'Connection failed' };
+    }
+  }
+
+  handleLogout = () => {
+    localStorage.removeItem('diabloAuthToken');
+    this.setState({ user: null, isOnline: false, onlineSaves: [] });
+  }
+
+  loadOnlineSaves = async () => {
+    try {
+      const token = localStorage.getItem('diabloAuthToken');
+      const response = await fetch('/api/saves', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        const saves = await response.json();
+        this.setState({ onlineSaves: saves });
+      }
+    } catch (error) {
+      console.error('Failed to load online saves:', error);
+    }
+  }
+
+  // Controles Mobile
+  handleMobileMove = (x, y) => {
+    if (!this.game || !this.state.started) return;
+    
+    // Converter coordenadas normalizadas para coordenadas de tela do jogo
+    const screenX = Math.round(320 + x * 300);
+    const screenY = Math.round(240 + y * 220);
+    
+    this.setCursorPos(screenX, screenY);
+    
+    // Simular movimento contínuo do mouse
+    if (Math.abs(x) > 0.1 || Math.abs(y) > 0.1) {
+      this.game("DApi_Mouse", 0, 0, 0, screenX, screenY);
+      
+      // Simular clique esquerdo para movimento
+      if (!this.movementActive) {
+        this.game("DApi_Mouse", 1, 1, 0, screenX, screenY);
+        this.movementActive = true;
+      }
+    } else if (this.movementActive) {
+      this.game("DApi_Mouse", 2, 1, 0, screenX, screenY);
+      this.movementActive = false;
+    }
+  }
+
+  handleMobileAction = (action) => {
+    if (!this.game || !this.state.started) return;
+    
+    const { x, y } = this.cursorPos;
+    const rect = this.canvas.getBoundingClientRect();
+    const gameX = Math.round((x - rect.left) / (rect.right - rect.left) * 640);
+    const gameY = Math.round((y - rect.top) / (rect.bottom - rect.top) * 480);
+    
+    switch (action) {
+      case 'attack':
+        // Ataque com botão direito
+        this.game("DApi_Mouse", 1, 2, 0, gameX, gameY);
+        setTimeout(() => this.game("DApi_Mouse", 2, 2, 0, gameX, gameY), 50);
+        break;
+      case 'interact':
+        // Interagir com botão esquerdo
+        this.game("DApi_Mouse", 1, 1, 0, gameX, gameY);
+        setTimeout(() => this.game("DApi_Mouse", 2, 1, 0, gameX, gameY), 50);
+        break;
+      case 'potion':
+        // Usar poção (tecla 1)
+        this.game("DApi_Key", 0, 0, 49);
+        setTimeout(() => this.game("DApi_Key", 1, 0, 49), 50);
+        break;
+      default:
+        break;
+    }
+  }
+
+  handleMobileMenu = (menu) => {
+    if (!this.game || !this.state.started) return;
+    
+    const keyMap = {
+      inventory: 9,   // Tab
+      character: 67,  // 'C'
+      spell: 66,      // 'B'
+      map: 77         // 'M'
+    };
+    
+    const keyCode = keyMap[menu];
+    if (keyCode) {
+      this.game("DApi_Key", 0, 0, keyCode);
+      setTimeout(() => this.game("DApi_Key", 1, 0, keyCode), 50);
+    }
+  }
+
+  handleMobileBelt = (slot) => {
+    if (!this.game || !this.state.started) return;
+    
+    const keyCode = 49 + (slot - 1); // 1-4 para slots do cinto
+    this.game("DApi_Key", 0, 0, keyCode);
+    setTimeout(() => this.game("DApi_Key", 1, 0, keyCode), 50);
+  }
+
+  // Multiplayer
+  toggleMultiplayerLobby = () => {
+    if (!this.state.user) {
+      this.setState({ showAuthModal: true });
+      return;
+    }
+    this.setState(prevState => ({ 
+      showMultiplayerLobby: !prevState.showMultiplayerLobby 
+    }));
+  }
+
+  handleCreateRoom = (room) => {
+    console.log('Room created:', room);
+    // TODO: Implementar criação de sala via WebRTC
+    this.setState({ showMultiplayerLobby: false });
+  }
+
+  handleJoinRoom = (room) => {
+    console.log('Joined room:', room);
+    // TODO: Implementar junção à sala via WebRTC
+    this.setState({ showMultiplayerLobby: false });
+  }
+
+  handleInviteFriend = () => {
+    // TODO: Implementar convite de amigos
+    console.log('Invite friend clicked');
+  }
+
+  // ... (restante dos métodos existentes: onDrop, onDragOver, etc.)
 
   onDrop = e => {
     const file = getDropFile(e);
@@ -154,18 +389,22 @@ class App extends React.Component {
     }
     this.setState({dropping: 0});
   }
+
   onDragEnter = e => {
     e.preventDefault();
     this.setDropping(1);
   }
+
   onDragOver = e => {
     if (isDropFile(e)) {
       e.preventDefault();
     }
   }
+
   onDragLeave = e => {
     this.setDropping(-1);
   }
+
   setDropping(inc) {
     this.setState(({dropping}) => ({dropping: Math.max(dropping + inc, 0)}));
   }
@@ -242,6 +481,7 @@ class App extends React.Component {
       this.setState({show_saves: !this.state.show_saves});
     }
   }
+
   updateSaves() {
     return this.fs.then(fs => {
       const saves = {};
@@ -251,6 +491,7 @@ class App extends React.Component {
       this.setState({save_names: saves});
     });
   }
+
   removeSave(name) {
     if (window.confirm(`Are you sure you want to delete ${name}?`)) {
       (async () => {
@@ -261,6 +502,7 @@ class App extends React.Component {
       })();
     }
   }
+
   downloadSave(name) {
     this.fs.then(fs => fs.download(name));
   }
@@ -351,6 +593,8 @@ class App extends React.Component {
     }, e => this.onError(e.message, e.stack));
   }
 
+  // ... (restante dos métodos de controle: pointerLocked, mousePos, etc.)
+
   pointerLocked() {
     return document.pointerLockElement === this.canvas || document.mozPointerLockElement === this.canvas;
   }
@@ -379,6 +623,7 @@ class App extends React.Component {
     default: return 1;
     }
   }
+
   eventMods(e) {
     return ((e.shiftKey || this.touchMods[TOUCH_SHIFT]) ? 1 : 0) + (e.ctrlKey ? 2 : 0) + (e.altKey ? 4 : 0) + (e.touches ? 8 : 0);
   }
@@ -487,9 +732,11 @@ class App extends React.Component {
       this.game("text", valid, flags);
     }
   }
+
   onKeyboard = () => {
     this.onKeyboardInner(0);
   }
+
   onKeyboardBlur = () => {
     this.onKeyboardInner(1);
   }
@@ -626,6 +873,7 @@ class App extends React.Component {
       }
     }
   }
+
   onTouchMove = e => {
     if (!this.canvas) return;
     if (e.target === this.keyboard) {
@@ -637,6 +885,7 @@ class App extends React.Component {
       this.game("DApi_Mouse", 0, 0, this.eventMods(e), x, y);
     }
   }
+
   onTouchEnd = e => {
     if (!this.canvas) return;
     if (e.target === this.keyboard) {
@@ -680,11 +929,23 @@ class App extends React.Component {
   }
 
   renderUi() {
-    const {started, loading, error, progress, has_spawn, save_names, show_saves, compress} = this.state;
+    const { started, loading, error, progress, has_spawn, save_names, show_saves, compress, user, isOnline } = this.state;
+    
     if (show_saves && typeof save_names === "object") {
       const plrClass = ["Warrior", "Rogue", "Sorcerer"];
       return (
         <div className="start">
+          <div className="user-info">
+            {user && (
+              <div className="user-badge">
+                <FontAwesomeIcon icon={faUser} />
+                <span>{user.username}</span>
+                {isOnline && <span className="online-indicator">Online</span>}
+              </div>
+            )}
+          </div>
+          
+          <h3>Local Saves</h3>
           <ul className="saveList">
             {Object.entries(save_names).map(([name, info]) => <li key={name}>
               {name}{info ? <span className="info">{info.name} (lv. {info.level} {plrClass[info.cls]})</span> : ""}
@@ -692,6 +953,21 @@ class App extends React.Component {
               <FontAwesomeIcon className="btnRemove" icon={faTimes} onClick={() => this.removeSave(name)}/>
             </li>)}
           </ul>
+
+          {isOnline && (
+            <>
+              <h3>Online Saves</h3>
+              <ul className="saveList">
+                {this.state.onlineSaves.map(save => (
+                  <li key={save._id}>
+                    {save.characterName} <span className="info">(lv. {save.level} {save.characterClass})</span>
+                    <span className="info">{new Date(save.lastSaved).toLocaleDateString()}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
           <form>
             <label htmlFor="loadFile" className="startButton">Upload Save</label>
             <input accept=".sv" type="file" id="loadFile" style={{display: "none"}} onChange={this.parseSave}/>
@@ -724,6 +1000,22 @@ class App extends React.Component {
     } else if (!started) {
       return (
         <div className="start">
+          <div className="user-info">
+            {user ? (
+              <div className="user-badge">
+                <FontAwesomeIcon icon={faUser} />
+                <span>{user.username}</span>
+                {isOnline && <span className="online-indicator">Online</span>}
+                <button className="logout-btn" onClick={this.handleLogout}>Logout</button>
+              </div>
+            ) : (
+              <button className="auth-btn" onClick={() => this.setState({ showAuthModal: true })}>
+                <FontAwesomeIcon icon={faUser} />
+                Login/Register
+              </button>
+            )}
+          </div>
+
           <p>
             This is a web port of the original Diablo game, based on source code reconstructed by
             GalaXyHaXz and devilution team. The project page with information and links can be found over here <Link href="https://github.com/d07RiV/diabloweb">https://github.com/d07RiV/diabloweb</Link>
@@ -744,15 +1036,63 @@ class App extends React.Component {
           </form>
           <div className="startButton" onClick={() => this.start()}>Play Shareware</div>
           {!!save_names && <div className="startButton" onClick={this.showSaves}>Manage Saves</div>}
+          
+          {/* Botão Multiplayer */}
+          <div className="startButton multiplayer-btn" onClick={this.toggleMultiplayerLobby}>
+            <FontAwesomeIcon icon={faUsers} style={{marginRight: '8px'}}/>
+            Multiplayer
+          </div>
+
+          {/* Botão Configurações */}
+          <div className="startButton" onClick={() => alert('Settings coming soon!')}>
+            <FontAwesomeIcon icon={faCog} style={{marginRight: '8px'}}/>
+            Settings
+          </div>
         </div>
       );
     }
   }
 
   render() {
-    const {started, error, dropping} = this.state;
+    const { started, error, dropping, isMobile, showMultiplayerLobby, showAuthModal } = this.state;
+    
     return (
-      <div className={classNames("App", {touch: this.touchControls, started, dropping, keyboard: !!this.showKeyboard})} ref={this.setElement}>
+      <div className={classNames("App", { 
+        touch: this.touchControls, 
+        started, 
+        dropping, 
+        keyboard: !!this.showKeyboard, 
+        mobile: isMobile 
+      })} ref={this.setElement}>
+        
+        {/* Controles Mobile */}
+        {isMobile && started && !error && (
+          <MobileControls
+            onMove={this.handleMobileMove}
+            onAction={this.handleMobileAction}
+            onMenu={this.handleMobileMenu}
+            onBelt={this.handleMobileBelt}
+          />
+        )}
+
+        {/* Lobby Multiplayer */}
+        <MultiplayerLobby
+          visible={showMultiplayerLobby}
+          onClose={this.toggleMultiplayerLobby}
+          onCreateRoom={this.handleCreateRoom}
+          onJoinRoom={this.handleJoinRoom}
+          onInviteFriend={this.handleInviteFriend}
+        />
+
+        {/* Modal de Autenticação */}
+        <AuthModal
+          visible={showAuthModal}
+          onClose={() => this.setState({ showAuthModal: false })}
+          onLogin={this.handleLogin}
+          onRegister={this.handleRegister}
+        />
+
+        {/* UI de toque existente */}
         <div className="touch-ui touch-mods">
           <div className={classNames("touch-button", "touch-button-0", {active: this.touchMods[0]})} ref={this.setTouch0}/>
           <div className={classNames("touch-button", "touch-button-1", {active: this.touchMods[1]})} ref={this.setTouch1}/>
@@ -771,6 +1111,7 @@ class App extends React.Component {
           <div className={classNames("touch-button", "touch-button-5")} ref={this.setTouch8} />
           <div className={classNames("touch-button", "touch-button-6")} ref={this.setTouch9} />
         </div>
+        
         <div className="Body">
           <div className="inner">
             {!error && <canvas ref={this.setCanvas} width={640} height={480}/>}
