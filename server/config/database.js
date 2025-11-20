@@ -15,9 +15,6 @@ async function connectDB() {
     console.log('🔌 Conectando ao MongoDB Atlas...');
     
     const client = new MongoClient(MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      tls: true,
       tlsAllowInvalidCertificates: false,
       retryWrites: true,
       w: 'majority',
