@@ -4,7 +4,7 @@ const http = require('http');
 const socketIo = require('socket.io');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const connectDB = require('../config/database');
+const connectDB = require('./config/database');
 
 const app = express();
 const server = http.createServer(app);
