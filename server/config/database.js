@@ -1,48 +1,37 @@
-const { MongoClient } = require('mongodb');
+const admin = require('firebase-admin');
 
-let cachedClient = null;
-let cachedDb = null;
+let db;
 
-const MONGODB_URI = process.env.MONGODB_URI;
-const DB_NAME = 'diablo_web';
-
-async function connectDB() {
-  if (cachedClient && cachedDb) {
-    return cachedDb;
+function connectDB() {
+  if (db) {
+    return db;
   }
 
   try {
-    console.log('🔌 Conectando ao MongoDB Atlas...');
-    
-    const client = new MongoClient(MONGODB_URI, {
-      tlsAllowInvalidCertificates: false,
-      retryWrites: true,
-      w: 'majority',
-      serverSelectionTimeoutMS: 30000,
-      connectTimeoutMS: 30000,
-      socketTimeoutMS: 45000,
+    console.log('🔌 Inicializando Firebase Admin SDK...');
+
+    const serviceAccount = {
+      type: "service_account",
+      project_id: process.env.FIREBASE_PROJECT_ID,
+      private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
+      private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      client_email: process.env.FIREBASE_CLIENT_EMAIL,
+      client_id: process.env.FIREBASE_CLIENT_ID,
+      auth_uri: "https://accounts.google.com/o/oauth2/auth",
+      token_uri: "https://oauth2.googleapis.com/token",
+      auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+      client_x509_cert_url: process.env.FIREBASE_CLIENT_X509_CERT_URL
+    };
+
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount)
     });
 
-    await client.connect();
-    
-    console.log('✅ MongoDB Atlas conectado com sucesso!');
-    
-    const db = client.db(DB_NAME);
-    
-    // Teste a conexão
-    await db.command({ ping: 1 });
-    console.log('📊 Ping no MongoDB realizado com sucesso');
-
-    cachedClient = client;
-    cachedDb = db;
-
+    db = admin.firestore();
+    console.log('✅ Firestore conectado com sucesso!');
     return db;
   } catch (error) {
-    console.error('❌ ERRO de conexão MongoDB:', error.message);
-    console.log('💡 Verifique:');
-    console.log('   - String de conexão no Render');
-    console.log('   - Usuário/senha do MongoDB Atlas');
-    console.log('   - Network Access (0.0.0.0/0)');
+    console.error('❌ ERRO ao inicializar Firebase:', error);
     process.exit(1);
   }
 }

@@ -1,9 +1,9 @@
 import React from 'react';
 import './App.scss';
 import classNames from 'classnames';
-import ReactGA from 'react-ga';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTimes, faDownload, faUsers, faUser, faCog } from '@fortawesome/free-solid-svg-icons';
+import { faTimes, faDownload, faUsers, faUser, faCog, faGoogle } from '@fortawesome/free-solid-svg-icons';
+import { faGoogle as faGoogleBrand } from '@fortawesome/free-brands-svg-icons';
 import getPlayerName from './api/savefile';
 
 import { mapStackTrace } from 'sourcemapped-stacktrace';
@@ -12,6 +12,8 @@ import create_fs from './fs';
 import load_game from './api/loader';
 import { SpawnSizes } from './api/load_spawn';
 import CompressMpq from './mpqcmp';
+import { initializeApp } from 'firebase/app';
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "firebase/auth";
 
 import Peer from 'peerjs';
 
@@ -22,10 +24,20 @@ import AuthModal from './components/AuthModal';
 
 window.Peer = Peer;
 
-if (process.env.NODE_ENV === 'production') {
-  ReactGA.initialize('UA-43123589-6');
-  ReactGA.pageview('/');
-}
+// Firebase configuration
+const firebaseConfig = {
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+};
+
+// Initialize Firebase
+const firebaseApp = initializeApp(firebaseConfig);
+const auth = getAuth(firebaseApp);
+const googleProvider = new GoogleAuthProvider();
 
 function reportLink(e, retail) {
   const message = (e.message || "Unknown error") + (e.stack ? "\n" + e.stack : "");
@@ -148,11 +160,34 @@ class App extends React.Component {
     document.addEventListener("dragenter", this.onDragEnter, true);
     document.addEventListener("dragleave", this.onDragLeave, true);
 
-    // Detectar mudança de tamanho da tela
     window.addEventListener('resize', this.handleResize);
     
-    // Verificar autenticação
-    this.checkAuth();
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const token = await user.getIdToken();
+        localStorage.setItem('diabloAuthToken', token);
+        
+        try {
+          const response = await fetch('/api/auth/verify-token', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+
+          if (response.ok) {
+            const { user: userData } = await response.json();
+            this.setState({ user: userData, isOnline: true, showAuthModal: false });
+            this.loadOnlineSaves();
+          } else {
+            this.handleLogout();
+          }
+        } catch (error) {
+          console.error("Error verifying token with backend", error);
+          this.handleLogout();
+        }
+      } else {
+        this.handleLogout();
+      }
+    });
 
     this.fs.then(fs => {
       const spawn = fs.files.get('spawn.mpq');
@@ -173,81 +208,17 @@ class App extends React.Component {
     this.setState({ isMobile: window.innerWidth <= 768 });
   }
 
-  // Sistema de Autenticação
-  checkAuth = async () => {
-    const token = localStorage.getItem('diabloAuthToken');
-    if (token) {
-      try {
-        const response = await fetch('/api/auth/verify', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (response.ok) {
-          const userData = await response.json();
-          this.setState({ user: userData.user, isOnline: true });
-          this.loadOnlineSaves();
-        }
-      } catch (error) {
-        console.error('Auth verification failed:', error);
-        localStorage.removeItem('diabloAuthToken');
-      }
-    }
-  }
-
-  handleLogin = async (username, password) => {
+  handleGoogleLogin = async () => {
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        localStorage.setItem('diabloAuthToken', data.token);
-        this.setState({ 
-          user: data.user, 
-          isOnline: true,
-          showAuthModal: false 
-        });
-        this.loadOnlineSaves();
-        return { success: true };
-      } else {
-        const error = await response.json();
-        return { success: false, error: error.error };
-      }
+      await signInWithPopup(auth, googleProvider);
+      // onAuthStateChanged will handle the rest
     } catch (error) {
-      return { success: false, error: 'Connection failed' };
-    }
-  }
-
-  handleRegister = async (username, email, password) => {
-    try {
-      const response = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, email, password })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        localStorage.setItem('diabloAuthToken', data.token);
-        this.setState({ 
-          user: data.user, 
-          isOnline: true,
-          showAuthModal: false 
-        });
-        this.loadOnlineSaves();
-        return { success: true };
-      } else {
-        const error = await response.json();
-        return { success: false, error: error.error };
-      }
-    } catch (error) {
-      return { success: false, error: 'Connection failed' };
+      console.error("Google Sign-In Error:", error);
     }
   }
 
   handleLogout = () => {
+    signOut(auth);
     localStorage.removeItem('diabloAuthToken');
     this.setState({ user: null, isOnline: false, onlineSaves: [] });
   }
@@ -255,6 +226,7 @@ class App extends React.Component {
   loadOnlineSaves = async () => {
     try {
       const token = localStorage.getItem('diabloAuthToken');
+      if (!token) return;
       const response = await fetch('/api/saves', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -563,12 +535,6 @@ class App extends React.Component {
     this.setState({dropping: 0});
 
     const retail = !!(file && !file.name.match(/^spawn\.mpq$/i));
-    if (process.env.NODE_ENV === 'production') {
-      ReactGA.event({
-        category: 'Game',
-        action: retail ? 'Start Retail' : 'Start Shareware',
-      });
-    }
 
     this.setState({loading: true, retail});
 
@@ -938,8 +904,8 @@ class App extends React.Component {
           <div className="user-info">
             {user && (
               <div className="user-badge">
-                <FontAwesomeIcon icon={faUser} />
-                <span>{user.username}</span>
+                <img src={user.photoURL} alt="avatar" style={{width: 24, height: 24, borderRadius: '50%'}} />
+                <span>{user.displayName}</span>
                 {isOnline && <span className="online-indicator">Online</span>}
               </div>
             )}
@@ -1003,15 +969,15 @@ class App extends React.Component {
           <div className="user-info">
             {user ? (
               <div className="user-badge">
-                <FontAwesomeIcon icon={faUser} />
-                <span>{user.username}</span>
+                <img src={user.photoURL} alt="avatar" style={{width: 24, height: 24, borderRadius: '50%'}} />
+                <span>{user.displayName}</span>
                 {isOnline && <span className="online-indicator">Online</span>}
                 <button className="logout-btn" onClick={this.handleLogout}>Logout</button>
               </div>
             ) : (
-              <button className="auth-btn" onClick={() => this.setState({ showAuthModal: true })}>
-                <FontAwesomeIcon icon={faUser} />
-                Login/Register
+              <button className="auth-btn" onClick={this.handleGoogleLogin}>
+                <FontAwesomeIcon icon={faGoogleBrand} />
+                Sign in with Google
               </button>
             )}
           </div>
@@ -1054,7 +1020,7 @@ class App extends React.Component {
   }
 
   render() {
-    const { started, error, dropping, isMobile, showMultiplayerLobby, showAuthModal } = this.state;
+    const { started, error, dropping, isMobile, showMultiplayerLobby } = this.state;
     
     return (
       <div className={classNames("App", { 
@@ -1082,14 +1048,6 @@ class App extends React.Component {
           onCreateRoom={this.handleCreateRoom}
           onJoinRoom={this.handleJoinRoom}
           onInviteFriend={this.handleInviteFriend}
-        />
-
-        {/* Modal de Autenticação */}
-        <AuthModal
-          visible={showAuthModal}
-          onClose={() => this.setState({ showAuthModal: false })}
-          onLogin={this.handleLogin}
-          onRegister={this.handleRegister}
         />
 
         {/* UI de toque existente */}
