@@ -8,6 +8,22 @@ function connectDB() {
   }
 
   try {
+    // Validação das variáveis de ambiente
+    const requiredEnvVars = [
+      'FIREBASE_PROJECT_ID',
+      'FIREBASE_PRIVATE_KEY_ID',
+      'FIREBASE_PRIVATE_KEY',
+      'FIREBASE_CLIENT_EMAIL',
+      'FIREBASE_CLIENT_ID',
+      'FIREBASE_CLIENT_X509_CERT_URL'
+    ];
+
+    for (const varName of requiredEnvVars) {
+      if (!process.env[varName]) {
+        throw new Error(`Variável de ambiente obrigatória não definida: ${varName}. Por favor, verifique suas configurações no painel da Render.`);
+      }
+    }
+
     console.log('🔌 Inicializando Firebase Admin SDK...');
 
     const serviceAccount = {
